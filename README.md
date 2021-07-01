@@ -1,9 +1,9 @@
 # Twitter-Analysis
 
 ## Tools
-R.
-Rstudio.
-Twitter API.
+1) R.
+2) Rstudio.
+3) Twitter API.
 
 ## Mission
 Social media warfare termed 5th generation warfare describes the use of social media as a kind of weapon intending to cause lasting damage to certain actors such as governments or companies. Various strategies and tactics, as well as technological means, are used to push through a political, economic, social, or cultural agenda.
