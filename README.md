@@ -1,5 +1,10 @@
 # Twitter-Analysis
 
+## Tools
+R.
+Rstudio.
+Twitter API.
+
 ## Mission
 Social media warfare termed 5th generation warfare describes the use of social media as a kind of weapon intending to cause lasting damage to certain actors such as governments or companies. Various strategies and tactics, as well as technological means, are used to push through a political, economic, social, or cultural agenda.
 Pakistan being the victim of this 5th gen war for a long time. Last year EU Disinfo lab busted Indian propaganda media outlets operating across 65 countries the main purpose of them is to discredit Pakistan in any means possible.
