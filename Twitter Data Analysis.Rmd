@@ -1,0 +1,370 @@
+---
+title: "Twiiter Data Analysis - Lab Project"
+author: "(Faraz Ali - 172074), (Mohsin Ali - 170409) & (Hamza Nadeem - 170353)"
+date: "6/25/2021"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = "asis")
+```
+
+## Loading the packages and connecting with twitter
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+library(twitteR)
+library(ROAuth)
+library(tm)
+library(SnowballC)
+library(RColorBrewer)
+library(ggplot2)
+library(wordcloud)
+library(graph) #For Network of terms
+library(Rgraphviz) #For Network of terms
+library(topicmodels) #Topic Modelling
+library(data.table)
+library(devtools)
+library(sentiment)
+setup_twitter_oauth("",
+                    "",
+                    "",
+                    "")
+```
+\newpage
+
+## Getting Tweets of #hafizsaeed
+```{r, echo=TRUE, warning=FALSE}
+#Getting tweets
+#tweets<-searchTwitter("#hafizsaeed", lang = "en", n=3200)
+#Getting length of tweets
+#(n.tweet<-length(tweets))
+#Converting tweets to dataframe
+#tweets.df <- twListToDF(tweets)
+#write_as_csv(tweets.df, "twitterData.csv", prepend_ids = TRUE, na = "", fileEncoding = "UTF-8")
+
+tweets.df<-read.csv("twitterData.csv")
+tweets.df[1, c("id", "created", "screenName", "replyToSN", "favoriteCount", "retweetCount", "longitude", "latitude", "text")]
+
+
+#Wrapping the tweet text
+writeLines(strwrap(tweets.df$text[1], 06))
+
+```
+\newpage
+
+# Text Cleaning
+
+```{r, echo=TRUE, warning=FALSE}
+#Getting only the text element from the dataframe that we got 
+#through twitter API
+data<-tweets.df$text
+#Creating a copy of data
+tweetsCopy <- data
+#We are creating corpus to perform some computations
+myCorpus <- Corpus(VectorSource(data))
+#Converting data to lower case
+
+myCorpus <- tm_map(myCorpus, tolower)
+#Creating function which will be used to remove URLs from the data
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+#Now by using the above function we are removing the URLs and getting 
+#the data back in myCorpus var
+myCorpus <- tm_map(myCorpus, content_transformer(removeURL))
+
+#Creating another function which will remove the letters other than english
+#letters or spaces
+removeNumPunct <- function(x) gsub("[^[:alpha:][:space:]]*", "", x)
+#Applying above function on the data
+myCorpus <- tm_map(myCorpus, content_transformer(removeNumPunct))
+
+#Removing all the numbers
+myCorpus <- tm_map(myCorpus,removeNumbers)
+
+#Now applying the above words and remove them from the data
+myCorpus <- tm_map(myCorpus, removeWords, stopwords('english'))
+
+#Removing extra spaces from the data
+myCorpus <- tm_map(myCorpus, stripWhitespace)
+#Removing punctuation from the data
+myCorpus <- tm_map(myCorpus, removePunctuation)
+#Creating a copy for later use
+myCorpusCopy <- myCorpus
+#Inspecting first three tweets
+inspect(myCorpus[1:3])
+```
+\newpage
+
+
+# Stemming and Stem Completion
+
+```{r, echo=TRUE, warning=FALSE}
+#removing the commoner morphological and inflectional endings from 
+#words in English using stemDocument which works on porter's stemming
+#algorithm
+myCorpus <- tm_map(myCorpus, stemDocument)
+#Getting the first latest resultant tweet after stemming
+writeLines(strwrap(myCorpus[[1]]$content, 60))
+
+```
+
+# Fixing issues of Stemming
+
+```{r, echo=TRUE, warning=FALSE}
+wordFreq <- function(corpus, word) {
+results <- lapply(corpus,
+function(x) { grep(as.character(x), pattern=paste0("nn<",word)) })
+sum(unlist(results))
+}
+
+replaceWord <- function(corpus, oldword, newword) {
+tm_map(corpus, content_transformer(gsub),
+pattern=oldword, replacement=newword)
+}
+
+myCorpus <- replaceWord(myCorpus, "hafizsae", "Hafiz Saeed")
+myCorpus <- replaceWord(myCorpus, "hafizsa", "Hafiz Saeed")
+myCorpus <- replaceWord(myCorpus, "hafizs", "Hafiz Saeed")
+myCorpus <- replaceWord(myCorpus, "secur", "security")
+myCorpus <- replaceWord(myCorpus, "peopl", "people")
+myCorpus <- replaceWord(myCorpus, "paxstan", "pakistan")
+myCorpus <- replaceWord(myCorpus, "forc", "force")
+myCorpus <- replaceWord(myCorpus, "armi", "army")
+myCorpus <- replaceWord(myCorpus, "lahor", "lahore")
+myCorpus <- replaceWord(myCorpus, "lahr", "lahore")
+myCorpus <- replaceWord(myCorpus, "polic", "police")
+myCorpus <- replaceWord(myCorpus, "countri", "country")
+myCorpus <- tm_map(myCorpus, removeWords, 'hafizsaeed')
+
+```
+
+
+
+# Building Term Document Matrix
+
+```{r, echo=TRUE, warning=FALSE}
+#Converting Unstructured data to structured data using TDM
+tdm <- TermDocumentMatrix(myCorpus)
+tdm
+
+#The words with frequency more that 150
+(freq.terms <- findFreqTerms(tdm, lowfreq = 200))
+
+#Rowsumming and getting only words having more than 10 frequency
+term.freq <- rowSums(as.matrix(tdm))
+term.freq <- subset(term.freq, term.freq >= 200)
+df <- data.frame(term = names(term.freq), freq = term.freq)
+#Now plotting
+ggplot(df, aes(x=term, y=freq)) + geom_bar(stat="identity") +
+  xlab("Terms") + ylab("Count") + coord_flip() 
+
+```
+
+# Wordcloud
+
+```{r, echo=TRUE, fig.width=7.5,fig.height=7.5,fig.align='center', warning=FALSE}
+w <- as.matrix(tdm)
+#Calculating the frequency of words and sort it by decreasing order 
+#of frequency
+word.freq <- sort(rowSums(w), decreasing = T) 
+#Creating color for wordcloud
+pal <- brewer.pal(8, "Dark2")[-(1:4)]
+#Creating word cloud
+wordcloud(words = names(word.freq), freq = word.freq, 
+          min.freq = 50, random.order = F, colors = pal)
+
+```
+
+\newpage
+
+# Topic Modelling
+
+```{r, echo=TRUE, warning=FALSE,fig.height=3, fig.align='center'}
+dtm <- as.DocumentTermMatrix(tdm)
+rowTotals <- apply(dtm , 1, sum)
+dtm.new   <- dtm[rowTotals> 0, ] 
+lda <- LDA(dtm.new, k = 6) #Finding 8 topics from the tweets data
+term <- terms(lda,5) #And each topic will have first 7 terms
+(term <- apply(term, MARGIN = 2, paste, collapse=", "))
+topics <- topics(lda) # 1st topic identified for every document (tweet)
+
+
+```
+
+
+\newpage
+# Sentiment Analysis
+
+```{r, echo=TRUE, warning=FALSE, fig.height=4}
+sentiments <- sentiment(tweets.df$text)
+#Checking polarity of tweets
+table(sentiments$polarity)
+
+#Plotting Sentiments
+sentiments$score <- 0 #Assigning scores
+sentiments$score[sentiments$polarity == "positive"] <- 1
+sentiments$score[sentiments$polarity == "negative"] <- -1
+sentiments$user <- tweets.df$screenName
+#Now combining 
+abc<-tweets.df$screenName
+df <- do.call(rbind.data.frame, Map('c', sentiments$polarity, 
+                                    tweets.df$text, 
+                                    abc))
+colnames(df)[1] <- "A"
+colnames(df)[2] <- "B"
+colnames(df)[3] <- "C"
+fd <- df[df$A != "neutral", ];   
+fd <- fd[fd$A != "positive", ];   
+```
+# Preprocessing of Negative Tweets
+
+```{r, echo=TRUE, warning=FALSE, fig.align='center', fig.height=3}
+data<-fd$B
+myCorpus <- Corpus(VectorSource(data))
+myCorpus <- tm_map(myCorpus, tolower)
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+myCorpus <- tm_map(myCorpus, content_transformer(removeURL))
+removeNumPunct <- function(x) gsub("[^[:alpha:][:space:]]*", "", x)
+myCorpus <- tm_map(myCorpus, content_transformer(removeNumPunct))
+myCorpus <- tm_map(myCorpus,removeNumbers)
+myCorpus <- tm_map(myCorpus, removeWords, stopwords('english'))
+myCorpus <- tm_map(myCorpus, stripWhitespace)
+myCorpus <- tm_map(myCorpus, removePunctuation)
+
+tdm <- TermDocumentMatrix(myCorpus)
+
+dtm <- as.DocumentTermMatrix(tdm)
+rowTotals <- apply(dtm , 1, sum)
+dtm.new   <- dtm[rowTotals> 0, ] 
+lda <- LDA(dtm.new, k = 7) #Finding 7 topics from the tweets data
+term <- terms(lda,5) #And each topic will have first 5 terms
+(term <- apply(term, MARGIN = 2, paste, collapse=", "))
+
+topics <- topics(lda) # 1st topic identified for every document (tweet)
+
+sentiments <- sentiment(fd$B)
+fd$C
+#Checking polarity of tweets
+table(sentiments$polarity)
+```
+
+# Followers Analysis
+
+```{r, echo=TRUE, warning=FALSE, fig.height=3}
+#uniqueOnly<-unique(fd$C)
+#uniqueOnly
+#library(twitteR)
+#library(foreign)
+#library(base64enc)
+#library(devtools)
+#library(raster)
+#library(RCurl)
+#users <- uniqueOnly
+#locations <- list() #Create an empty list to populate
+#k<-1
+#  for (i in 1:length(users)){
+#    start <- getUser(users[i])
+#    friends_object <- lookupUsers(start$getFriendIDs())
+#    friends_object <- twListToDF(friends_object)
+#    #followers_object <- lookupUsers(start$getFriendIDs())
+#    #followers_object
+#    if(length(friends_object)>0){
+#      #friends_object <- twListToDF(friends_object)
+#      locationss <- friends_object[[12]]
+#      for (j in length(locationss)){
+#        locations[k]<-locationss[j]
+#        k<-k+1
+#    }
+#
+#  }
+#
+#}
+#length(locations)
+#class(locationss)
+#abcd<-data.frame(locationss)
+#write_as_csv(abcd, "locations.csv", prepend_ids = TRUE, na = "", fileEncoding = "UTF-8")
+
+```
+
+# location preprocessing
+
+```{r, echo=TRUE, warning=FALSE, fig.height=3}
+
+location.df<-read.csv("locations.csv")
+data<-location.df
+#Creating a copy of data
+tweetsCopy <- data
+#We are creating corpus to perform some computations
+myCorpus <- Corpus(VectorSource(data))
+#Converting data to lower case
+
+myCorpus <- tm_map(myCorpus, tolower)
+#Creating function which will be used to remove URLs from the data
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+#Now by using the above function we are removing the URLs and getting 
+#the data back in myCorpus var
+myCorpus <- tm_map(myCorpus, content_transformer(removeURL))
+
+#Creating another function which will remove the letters other than english
+#letters or spaces
+removeNumPunct <- function(x) gsub("[^[:alpha:][:space:]]*", "", x)
+#Applying above function on the data
+myCorpus <- tm_map(myCorpus, content_transformer(removeNumPunct))
+
+#Removing all the numbers
+myCorpus <- tm_map(myCorpus,removeNumbers)
+#Removing extra spaces from the data
+myCorpus <- tm_map(myCorpus, stripWhitespace)
+#Removing punctuation from the data
+myCorpus <- tm_map(myCorpus, removePunctuation)
+#Creating a copy for later use
+myCorpusCopy <- myCorpus
+#Inspecting first three tweets
+inspect(myCorpus[1:3])
+
+```
+
+
+
+
+# Wordcloud of Locations
+
+```{r, echo=TRUE, warning=FALSE, fig.height=3}
+
+tdm <- TermDocumentMatrix(myCorpus)
+tdm
+
+#The words with frequency more that 150
+(freq.terms <- findFreqTerms(tdm, lowfreq = 3))
+
+#Rowsumming and getting only words having more than 10 frequency
+term.freq <- rowSums(as.matrix(tdm))
+term.freq <- subset(term.freq, term.freq >= 3)
+df <- data.frame(term = names(term.freq), freq = term.freq)
+#Now plotting
+ggplot(df, aes(x=term, y=freq)) + geom_bar(stat="identity") +
+  xlab("Terms") + ylab("Count") + coord_flip() 
+
+
+
+w <- as.matrix(tdm)
+#Calculating the frequency of words and sort it by decreasing order 
+#of frequency
+word.freq <- sort(rowSums(w), decreasing = T) 
+#Creating color for wordcloud
+pal <- brewer.pal(8, "Dark2")[-(1:4)]
+#Creating word cloud
+wordcloud(words = names(word.freq), freq = word.freq, 
+          min.freq = 1, random.order = F, colors = pal)
+```
+
+
+
+# Sentiment Analysis using Syuzhet
+
+```{r, echo=TRUE, warning=FALSE, fig.height=3}
+library(syuzhet)
+x<-get_nrc_sentiment(fd$B)
+barplot(colSums(x), las=2, col=rainbow(10), ylab = 'Count', 
+        main = 'Sentiment Scores of #hafizsaeed Tweets')
+```
